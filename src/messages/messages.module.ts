@@ -1,0 +1,24 @@
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Module } from '@nestjs/common';
+import { MessagesController } from './messages.controller';
+import { MessagesService } from './messages.services';
+import { BrainClientFacade } from 'src/clients/brain.client.facade';
+import { HttpModule } from '@nestjs/axios';
+
+
+import { MessagesEntity } from './messages.entity';
+
+
+// Module definition for Messages . Modules are used to organize related components, controllers, and services in a NestJS application.
+@Module({
+  // Auto-register the Message entity with TypeORM in this module and generate the necessary repository classes
+  imports: [TypeOrmModule.forFeature([MessagesEntity]) , HttpModule],
+
+  // imports: [], // Used to import other modules.. specify the module names here
+  controllers: [MessagesController],
+  // bean definitions in spring boot
+  providers: [MessagesService, BrainClientFacade],
+  exports: [MessagesService],
+  // exports: [] // Used to make providers available outside this module to other modules
+})
+export class MessagesModule {}
