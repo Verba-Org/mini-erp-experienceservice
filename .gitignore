@@ -54,3 +54,59 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+# Environment files - All variations
+.env
+.env.*
+!.env.example
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+db.sqlite
+test.sqlite
+
+# Package manager lock files (optional - include if you want to commit package-lock.json)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# IDEs
+.vscode/
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS files
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# NestJS specific
+dist/
+node_modules/
+.eslintcache
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# npm
+package-lock.json
+
+# Temporary files
+*.tmp
+.tmp/
+.temp/

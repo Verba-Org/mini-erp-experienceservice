@@ -8,9 +8,15 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MessagesModule } from './messages/messages.module';
 import { UsersModule } from './users/users.module';
+import { SeedModule } from './seed/seed.module';
 
 import { MessagesEntity } from './messages/messages.entity';
 import { User } from './users/users.entity';
+import { Organization } from './messages/entities/organization.entity';
+import { Product } from './messages/entities/product.entity';
+import { Party } from './messages/entities/party.entity';
+import { Invoice } from './messages/entities/invoice.entity';
+import { InvoiceItem } from './messages/entities/invoice-item.entity';
 import { APP_PIPE } from '@nestjs/core';
 const cookieSession = require('cookie-session');
 
@@ -42,13 +48,15 @@ const cookieSession = require('cookie-session');
         return {
           type: configService.get<any>('DB_TYPE'), // e.g., 'sqlite'
           database: configService.get<string>('DB_NAME'), // e.g., 'db.sqlite'
-          entities: [MessagesEntity, User],
+          // Purpose: This tells TypeORM which entities to manage and synchronize with the database at application startup.
+          entities: [MessagesEntity, User, Organization, Product, Party, Invoice, InvoiceItem],
           synchronize: true, // Note: Set to false in production to avoid data loss
         };
       },
     }),
     MessagesModule,
     UsersModule,
+    SeedModule,
   ],
   controllers: [AppController],
   providers: [AppService,
@@ -69,13 +77,15 @@ const cookieSession = require('cookie-session');
 })
 export class AppModule {
 
+  constructor(private configService: ConfigService) {}
+
   // Configure middleware for the application that applies to all routes.
 configure(consumer: MiddlewareConsumer) {
   console.log('AppModule configured');    
   // this is similar to spring boot authentication filter where every request will go through this filter
   consumer.apply( 
     cookieSession({
-      keys: ['mysecretkey'], // Replace with your own secret keys
+      keys: [this.configService.get('COOKIE_SECRET')], // Replace with your own secret keys
       // maxAge: 24 * 60 * 60 * 1000, // 24 hours
     }))
     .forRoutes('*');

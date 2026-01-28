@@ -3,6 +3,7 @@ import { HttpService } from "@nestjs/axios";
 import { ConfigService } from "@nestjs/config";
 import { firstValueFrom } from "rxjs";
 import * as https from 'https';
+import { BrainClientSchema } from "./schema/brain.client.schema";
 
 @Injectable()
 export class BrainClientFacade {
@@ -10,7 +11,7 @@ export class BrainClientFacade {
         , private configService: ConfigService
     ) {}
 
-    async fetchBrainData(content: string) {
+    async fetchBrainData(content: string) : Promise<BrainClientSchema> {
         try {
 
             const rejectUnauthorized = this.configService.get<boolean>(

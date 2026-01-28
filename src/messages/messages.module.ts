@@ -7,12 +7,17 @@ import { HttpModule } from '@nestjs/axios';
 
 
 import { MessagesEntity } from './messages.entity';
+import { Invoice } from './entities/invoice.entity';
+import { Organization } from './entities/organization.entity';
+import { Party } from './entities/party.entity';
+import { Product } from './entities/product.entity';
+import { InvoiceItem } from './entities/invoice-item.entity';  
 
 
 // Module definition for Messages . Modules are used to organize related components, controllers, and services in a NestJS application.
 @Module({
   // Auto-register the Message entity with TypeORM in this module and generate the necessary repository classes
-  imports: [TypeOrmModule.forFeature([MessagesEntity]) , HttpModule],
+  imports: [TypeOrmModule.forFeature([MessagesEntity, Invoice, InvoiceItem, Organization, Party, Product ]) , HttpModule],
 
   // imports: [], // Used to import other modules.. specify the module names here
   controllers: [MessagesController],
