@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToOne, JoinColumn } from 'typeorm';
 import { Invoice } from './invoice.entity';
 import { Product } from './product.entity';
 
@@ -16,7 +16,11 @@ export class InvoiceItem {
 //   @Column('decimal', { precision: 12, scale: 2 })
 //   unit_price: number;
 
-  @ManyToOne(() => Product)
+  @Column()
+  productId: string;
+
+  @OneToOne(() => Product)
+  @JoinColumn({ name: 'productId' })
   product: Product;
 
   @ManyToOne(() => Invoice, (invoice) => invoice.items)

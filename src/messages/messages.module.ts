@@ -12,6 +12,7 @@ import { Organization } from './entities/organization.entity';
 import { Party } from './entities/party.entity';
 import { Product } from './entities/product.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';  
+import { InvoiceProcessorFacadeImpl } from './facade/invoice.processor.facade';
 
 
 // Module definition for Messages . Modules are used to organize related components, controllers, and services in a NestJS application.
@@ -22,7 +23,7 @@ import { InvoiceItem } from './entities/invoice-item.entity';
   // imports: [], // Used to import other modules.. specify the module names here
   controllers: [MessagesController],
   // bean definitions in spring boot
-  providers: [MessagesService, BrainClientFacade],
+  providers: [MessagesService, BrainClientFacade, InvoiceProcessorFacadeImpl],
   exports: [MessagesService],
   // exports: [] // Used to make providers available outside this module to other modules
 })

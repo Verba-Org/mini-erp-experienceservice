@@ -7,8 +7,9 @@ export class LineItem {
 }
 
 export class BrainClientSchema {
-    intent : "CREATE_SALE" |  "LOG_PURCHASE" | "CHECK_INVENTORY" | "CREATE_INVOICE" | "UNKNOWN" ;
+    intent : "CREATE_SALES_ORDER" |  "CREATE_FULLFILLMENT" | "CHECK_INVENTORY" | "RECORD_PAYMENT" | "CREATE_INVOICE" |"UNKNOWN" ;
     party_name? : string ;
+    due_date? : string ;
     line_items? : LineItem[] ;
     summary?: string ;  
 

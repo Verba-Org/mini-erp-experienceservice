@@ -5,13 +5,18 @@ import { MessagesEntity } from "./messages.entity";
 import { User } from "src/users/users.entity";
 import { BrainClientFacade } from "src/clients/brain.client.facade";
 import { BrainClientSchema } from "src/clients/schema/brain.client.schema";
+import { InvoiceProcessorFacadeImpl } from "./facade/invoice.processor.facade";
+import { Invoice } from "./entities/invoice.entity";
 
 
 // Like a component annotation in spring boot framework. Marks the class as a provider that can be injected as a dependency.
 @Injectable()
 export class MessagesService {
 
-    constructor(@InjectRepository(MessagesEntity) private messageRepository: Repository<MessagesEntity>, private brainClientFacade:  BrainClientFacade) {}   
+    constructor(
+        @InjectRepository(MessagesEntity) private messageRepository: Repository<MessagesEntity>, 
+        private brainClientFacade:  BrainClientFacade,
+        private invoiceProcessorFacade: InvoiceProcessorFacadeImpl) {}   
 
     getMessageById(id: string) {
         
@@ -28,10 +33,11 @@ export class MessagesService {
     async acceptUserRequest(content: string, user: User) {
         const response : BrainClientSchema =  await this.brainClientFacade.fetchBrainData(content);
         console.log('Brain Client Response:', response);
+        return this.invoiceProcessorFacade.processInvoice(response);
 
         // extract intent from response 
-        const intent = response.intent;
-        console.log('Extracted Intent:', intent);
+        // const intent = response.intent;
+        // console.log('Extracted Intent:', intent);
 
         // and update invoices entity depending on the intent 
 //         The Intent: User texts: "Ryan wants 800 bottles of Kingfisher by Feb 1st."
@@ -51,7 +57,7 @@ export class MessagesService {
 // The Delivery: When the goods actually move, your cousin texts: "Order #101 delivered." 
 // 4. The Invoice: The system asks: "Should I generate the final GST/HST invoice for Ryan now?" 5. The Completion: User says "Yes." System changes status = 'PAID' and sends the PDF.
 
-        return response;
+        // return "Create";
 
     }
 }

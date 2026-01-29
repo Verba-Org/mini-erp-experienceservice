@@ -20,21 +20,29 @@ export class Invoice {
   @Column({ default: 'PENDING' })
   status: string; // PENDING, DELIVERED, PAID
 
-  @Column('decimal', { precision: 12, scale: 2 })
-  total_amount: number;
+  @Column('decimal', { precision: 12, scale: 2  , nullable: true })
+  total_amount: number | null;
 
   @Column({ type: 'datetime', nullable: true })
-  due_date: Date;
+  due_date: Date | null;
 
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;
 
+  @Column()
+  partyId: string;
+
+  @Column()
+  org_id: string
+
   @ManyToOne(() => Party)
+  @JoinColumn({ name: 'partyId' })
   party: Party;
 
   @OneToMany(() => InvoiceItem, (item) => item.invoice, { cascade: true })
   items: InvoiceItem[];
 
-  @ManyToOne(() => Organization, organization => organization.invoices)
+  @ManyToOne(() => Organization)
+  @JoinColumn({ name: 'org_id' })
   organization: Organization;
 }
