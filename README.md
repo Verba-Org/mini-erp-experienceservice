@@ -65,6 +65,48 @@ npm install --save @nestjs/typeorm typeorm sqlite3
 
 We are using sqlite for simplicity.
 
+### Running the API Locally
+
+All commands assume you are in the workspace root (`mini-erp-experienceservice`).
+
+```bash
+npm install            # one-time dependency install
+npm run start          # runs Nest in NODE_ENV=development without file watch
+npm run start:dev      # same as above but with --watch for rapid iteration
+npm run start:debug    # starts with the Node inspector for VS Code debugging
+```
+
+Use `npm run start` for Twilio/ngrok sessions so logs stay clean, and `npm run start:dev` while actively developing.
+
+### Exposing Webhooks with ngrok
+
+Twilio can only reach publicly accessible HTTPS endpoints. ngrok creates a temporary tunnel from your machine (default Nest port 3000) to an internet-facing URL so Twilio can call `POST /whatsapp/webhook`.
+
+1. Install ngrok (`brew install ngrok` or download from ngrok.com) and authenticate once: `ngrok config add-authtoken <token>`.
+2. In a separate terminal run:
+
+```bash
+ngrok http 3000
+```
+
+The console prints a URL such as `https://able-fox-123.ngrok-free.app`. 3. Keep this terminal open; every restart changes the URL unless you use a reserved domain. Update Twilio whenever the URL changes.
+
+### Twilio WhatsApp Sandbox Integration
+
+1. **Create a Twilio account**: sign up at https://www.twilio.com/try-twilio, verify your email and the mobile number you will use for testing.
+2. **Enable the WhatsApp sandbox**: in the Twilio Console go to _Messaging → Try it out → Send a WhatsApp message_. Twilio shows the sandbox number (typically `+14155238886`) and a one-time join code.
+3. **Join the sandbox from your phone**: open WhatsApp, start a chat with the Twilio sandbox number, and send the join code message exactly as displayed (for example, `join blue-owl`). Twilio replies confirming the link.
+4. **Configure sandbox webhooks**: in the same console screen set `WHEN A MESSAGE COMES IN` to your ngrok URL plus the Nest endpoint, e.g. `https://able-fox-123.ngrok-free.app/whatsapp/webhook`. This hits `WhatsappController.handleIncomingMessage()`.
+5. **Provide Twilio credentials to the app**: add these keys to `.env.development` (or the environment you run) so `WhatsappTwilioFacade` can send replies.
+
+```bash
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
+```
+
+6. **Run everything**: start the Nest server (`npm run start`), ensure ngrok is tunneling port 3000, and send a WhatsApp message to the sandbox number. Twilio forwards the payload to `/whatsapp/webhook`, where the controller triggers the BrainClient → InvoiceProcessor workflow and replies via Twilio.
+
 ## NestJS Core Concepts
 
 This application leverages several key NestJS architectural patterns and features:
@@ -403,23 +445,26 @@ The `AuthGuard` is a custom guard that protects routes by checking if a user is 
 **Location**: `src/common/guards/auth.guard.ts`
 
 **How it works**:
+
 ```typescript
 export class AuthGuard implements CanActivate {
-    canActivate(context: ExecutionContext): boolean {
-        const request = context.switchToHttp().getRequest();
-        // Check if session exists and contains userId
-        return request.session && request.session.userId;
-    }
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest();
+    // Check if session exists and contains userId
+    return request.session && request.session.userId;
+  }
 }
 ```
 
 The guard:
+
 1. Extracts the HTTP request from the execution context
 2. Checks if `session.userId` exists (set during sign-in)
 3. Returns `true` if user is authenticated, `false` otherwise
 4. If `false`, NestJS automatically returns a 403 Forbidden response
 
 **Usage in Controllers**:
+
 ```typescript
 @Get('/whoami')
 @UseGuards(AuthGuard)
@@ -433,6 +478,7 @@ The `@UseGuards(AuthGuard)` decorator applies the guard to the route. Only authe
 ### What are Interceptors?
 
 Interceptors are NestJS classes that implement the `NestInterceptor` interface. They intercept requests before they reach the route handler and responses before they are sent to the client. Interceptors can be used for:
+
 - Logging and monitoring
 - Transforming request/response data
 - Adding metadata to requests
@@ -446,29 +492,31 @@ The `CurrentUserInterceptor` enriches the request with the currently authenticat
 **Location**: `src/common/interceptors/current-user.interceptor.ts`
 
 **How it works**:
+
 ```typescript
 @Injectable()
 export class CurrentUserInterceptor implements NestInterceptor {
-    constructor(private usersService: UsersService) {}
+  constructor(private usersService: UsersService) {}
 
-    async intercept(context: ExecutionContext, next: CallHandler) {
-        const request = context.switchToHttp().getRequest();
-        const { userId } = request.session || {};
+  async intercept(context: ExecutionContext, next: CallHandler) {
+    const request = context.switchToHttp().getRequest();
+    const { userId } = request.session || {};
 
-        // If userId exists in session, fetch the user from database
-        if (userId) {
-            const user = await this.usersService.findOne(userId);
-            // Attach user to request object for use in controllers
-            request.user = user;
-        }
-
-        // Continue with the request processing
-        return next.handle();
+    // If userId exists in session, fetch the user from database
+    if (userId) {
+      const user = await this.usersService.findOne(userId);
+      // Attach user to request object for use in controllers
+      request.user = user;
     }
+
+    // Continue with the request processing
+    return next.handle();
+  }
 }
 ```
 
 **Key Points**:
+
 1. The interceptor runs before the route handler
 2. It extracts `userId` from `session.userId`
 3. It queries the database to fetch complete user details
@@ -476,6 +524,7 @@ export class CurrentUserInterceptor implements NestInterceptor {
 5. The request continues to the route handler with the user attached
 
 **Global Registration**: This interceptor is registered globally in `users.module.ts` so it applies to all routes:
+
 ```typescript
 {
   provide: 'APP_INTERCEPTOR',
@@ -490,6 +539,7 @@ The `@CurrentUser()` decorator is a custom parameter decorator that extracts the
 **Location**: `src/common/decorators/current-user.decorator.ts`
 
 **Implementation**:
+
 ```typescript
 export const CurrentUser = createParamDecorator(
   (data: never, ctx: ExecutionContext) => {
@@ -501,6 +551,7 @@ export const CurrentUser = createParamDecorator(
 ```
 
 **Usage**:
+
 ```typescript
 @Get('/whoami')
 @UseGuards(AuthGuard)
@@ -546,6 +597,7 @@ Instead of accessing `request.user` manually, the decorator injects the user dir
 **Example: Getting current user with authentication**
 
 1. **Client Request**:
+
    ```
    GET /auth/whoami
    Cookie: session=encrypted_session_data
@@ -592,14 +644,14 @@ If a request reaches a protected route without valid authentication:
 
 ### Comparison: Guards vs Interceptors vs Middleware
 
-| Feature | Middleware | Guards | Interceptors |
-|---------|-----------|--------|--------------|
-| **Purpose** | Request/response transformation | Authorization logic | Preprocessing/postprocessing |
-| **Execution Order** | First (Express middleware) | After middleware, before handler | Before and after handler |
-| **Can block requests** | Yes | Yes | No (but can throw errors) |
-| **Access to ExecutionContext** | No | Yes | Yes |
-| **Use Cases** | Parsing, logging | Permission checking | Data transformation, user enrichment |
-| **Example** | Body parser, CORS | AuthGuard, RoleGuard | CurrentUserInterceptor, logging |
+| Feature                        | Middleware                      | Guards                           | Interceptors                         |
+| ------------------------------ | ------------------------------- | -------------------------------- | ------------------------------------ |
+| **Purpose**                    | Request/response transformation | Authorization logic              | Preprocessing/postprocessing         |
+| **Execution Order**            | First (Express middleware)      | After middleware, before handler | Before and after handler             |
+| **Can block requests**         | Yes                             | Yes                              | No (but can throw errors)            |
+| **Access to ExecutionContext** | No                              | Yes                              | Yes                                  |
+| **Use Cases**                  | Parsing, logging                | Permission checking              | Data transformation, user enrichment |
+| **Example**                    | Body parser, CORS               | AuthGuard, RoleGuard             | CurrentUserInterceptor, logging      |
 
 ### Best Practices
 
@@ -609,7 +661,7 @@ If a request reaches a protected route without valid authentication:
 4. **Error Handling**: Guards that deny access should throw `ForbiddenException` instead of returning false for clearer error messages:
    ```typescript
    if (!isAuthorized) {
-       throw new ForbiddenException('Access denied');
+     throw new ForbiddenException('Access denied');
    }
    return true;
    ```
@@ -619,6 +671,7 @@ If a request reaches a protected route without valid authentication:
 ### Protected Routes in Application
 
 Currently protected routes that require authentication:
+
 - `GET /auth/whoami` - Get current authenticated user (requires AuthGuard)
 
 Protected routes can be extended to other controllers by adding `@UseGuards(AuthGuard)` decorator to route handlers or entire controller classes.
@@ -630,6 +683,7 @@ The application uses NestJS's `@nestjs/config` package to manage environment-bas
 ### What is ConfigService?
 
 `ConfigService` is a NestJS service provided by the `@nestjs/config` module that allows you to:
+
 - Load environment variables from `.env` files
 - Access configuration values throughout the application
 - Support different configurations for different environments
@@ -645,10 +699,11 @@ The ConfigModule is initialized in the AppModule with the following configuratio
 ConfigModule.forRoot({
   isGlobal: true, // Make ConfigModule available globally across all modules
   envFilePath: `.env.${process.env.NODE_ENV || 'development'}`, // Load .env files based on NODE_ENV
-})
+});
 ```
 
 **Key Configuration Options**:
+
 - **`isGlobal: true`**: Makes `ConfigService` available in all modules without importing ConfigModule in each module
 - **`envFilePath`**: Dynamically loads the appropriate environment file based on the `NODE_ENV` environment variable
   - Development: `.env.development`
@@ -660,6 +715,7 @@ ConfigModule.forRoot({
 The project uses separate environment files for different contexts:
 
 **`.env.development` (Local Development)**:
+
 ```dotenv
 DB_NAME=db.sqlite
 DB_TYPE=sqlite
@@ -667,6 +723,7 @@ PORT=3000
 ```
 
 **`.env.test` (Testing)**:
+
 ```dotenv
 DB_NAME=test.sqlite
 DB_TYPE=sqlite
@@ -679,6 +736,7 @@ DB_TYPE=sqlite
 #### 1. Loading Environment Variables
 
 When the application starts:
+
 1. Node.js `NODE_ENV` variable is checked (defaults to `'development'` if not set)
 2. ConfigModule loads the corresponding `.env.{NODE_ENV}` file
 3. All variables are parsed and made available through `ConfigService`
@@ -715,16 +773,18 @@ TypeOrmModule.forRootAsync({
       synchronize: true, // Auto-sync database schema (set to false in production)
     };
   },
-})
+});
 ```
 
 **How It Works**:
+
 1. `inject: [ConfigService]` tells NestJS to provide `ConfigService` to the factory function
 2. `useFactory` receives `configService` as a parameter
 3. Configuration values are read from the environment file at runtime
 4. TypeORM is configured with the fetched values
 
 **Benefits**:
+
 - Database connection can be changed without modifying code
 - Different databases for development/testing/production
 - Sensitive information stays in `.env` files (not in version control)
@@ -763,10 +823,11 @@ Module.forRootAsync({
       // Configuration derived from environment
     };
   },
-})
+});
 ```
 
 **This pattern is used for**:
+
 - `TypeOrmModule.forRootAsync()` - Database configuration
 - Custom services that need environment-based setup
 
@@ -796,18 +857,21 @@ Module.forRootAsync({
 ### Setting NODE_ENV in Different Contexts
 
 **Development**:
+
 ```bash
 # Automatically uses .env.development
 npm run start
 ```
 
 **Testing**:
+
 ```bash
 # Uses .env.test
 NODE_ENV=test npm test
 ```
 
 **Production**:
+
 ```bash
 # Uses .env.production
 NODE_ENV=production npm run start:prod
@@ -817,6 +881,7 @@ NODE_ENV=production npm run start:prod
 
 1. **Use Environment Files**: Always use `.env.*` files for configuration, never hardcode values
 2. **Add to .gitignore**: Ensure all `.env` files are in `.gitignore` to prevent committing sensitive data
+
    ```
    .env
    .env.*
@@ -825,25 +890,28 @@ NODE_ENV=production npm run start:prod
    ```
 
 3. **Provide Defaults**: Use `get()` with a default value for optional configuration
+
    ```typescript
    const port = configService.get<number>('PORT', 3000);
    ```
 
 4. **Type Safety**: Always specify the type parameter in `get()` for type checking
+
    ```typescript
    // Good
-   configService.get<string>('DB_NAME')
-   
+   configService.get<string>('DB_NAME');
+
    // Avoid
-   configService.get('DB_NAME')
+   configService.get('DB_NAME');
    ```
 
 5. **Centralize Configuration**: Create a dedicated configuration service to aggregate environment-based settings
+
    ```typescript
    @Injectable()
    export class ConfigurationService {
      constructor(private configService: ConfigService) {}
-     
+
      getDatabaseConfig() {
        return {
          type: this.configService.get<string>('DB_TYPE'),
@@ -854,6 +922,7 @@ NODE_ENV=production npm run start:prod
    ```
 
 6. **Document Environment Variables**: Maintain a list of all required environment variables in a template file
+
    ```
    .env.example:
    DB_NAME=db.sqlite
@@ -870,22 +939,25 @@ NODE_ENV=production npm run start:prod
        DB_TYPE: Joi.string().required(),
        DB_NAME: Joi.string().required(),
      }),
-   })
+   });
    ```
 
 ### Common Configuration Patterns in This Project
 
 **Pattern 1: Environment-Specific Database Setup**
+
 - Uses `NODE_ENV` to determine which `.env` file to load
 - TypeORM gets different database files based on environment
 - Prevents test database interference with development data
 
 **Pattern 2: Global Availability**
+
 - `isGlobal: true` makes ConfigService available everywhere
 - No need to import ConfigModule in every module
 - Simplified dependency injection across the application
 
 **Pattern 3: Async Factory Configuration**
+
 - `forRootAsync()` + `useFactory` pattern
 - Allows ConfigService to be used during module initialization
 - Enables dynamic configuration before other services start
@@ -893,6 +965,7 @@ NODE_ENV=production npm run start:prod
 ### Environment Variable Naming Convention
 
 Use UPPERCASE_WITH_UNDERSCORES for environment variable names:
+
 - `DB_NAME` - Database name
 - `DB_TYPE` - Database type
 - `PORT` - Application port
@@ -911,6 +984,7 @@ TypeORM relationships allow you to model complex database relationships and auto
 ### What are Database Relationships?
 
 Database relationships define how data in different tables/entities relates to each other:
+
 - **One-to-Many**: One record in a table can have multiple related records in another table
 - **Many-to-One**: Multiple records in one table can relate to a single record in another table
 
@@ -928,6 +1002,7 @@ These are two sides of the same relationship - just viewed from different perspe
 ### Project Relationship: User Has Many Messages
 
 The application models a **one-to-many** relationship between Users and Messages:
+
 - **One User** → **Many Messages** (A user can create multiple messages)
 - **Many Messages** → **One User** (Each message belongs to exactly one user)
 
@@ -936,27 +1011,28 @@ The application models a **one-to-many** relationship between Users and Messages
 **Location**: `src/users/users.entity.ts`
 
 ```typescript
-import { OneToMany, Entity, Column, PrimaryGeneratedColumn } from "typeorm";
-import { MessagesEntity } from "src/messages/messages.entity";
+import { OneToMany, Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import { MessagesEntity } from 'src/messages/messages.entity';
 
 @Entity()
 export class User {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @Column({ unique: true })
-    email: string;
+  @Column({ unique: true })
+  email: string;
 
-    @Column()
-    password: string;
+  @Column()
+  password: string;
 
-    // One user has many messages
-    @OneToMany(() => MessagesEntity, message => message.user)
-    messages: MessagesEntity[];
+  // One user has many messages
+  @OneToMany(() => MessagesEntity, (message) => message.user)
+  messages: MessagesEntity[];
 }
 ```
 
 **Key Points**:
+
 - `@OneToMany()` declares that one User can have many Messages
 - First parameter `() => MessagesEntity`: The related entity type
 - Second parameter `message => message.user`: The field in MessagesEntity that points back to User
@@ -968,24 +1044,25 @@ export class User {
 **Location**: `src/messages/messages.entity.ts`
 
 ```typescript
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from "typeorm";
-import { User } from "../users/users.entity";
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import { User } from '../users/users.entity';
 
 @Entity()
 export class MessagesEntity {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-    @Column()
-    content: string;
+  @Column()
+  content: string;
 
-    // Many messages belong to one user
-    @ManyToOne(() => User, user => user.messages)
-    user: User;
+  // Many messages belong to one user
+  @ManyToOne(() => User, (user) => user.messages)
+  user: User;
 }
 ```
 
 **Key Points**:
+
 - `@ManyToOne()` declares that many Messages belong to one User
 - First parameter `() => User`: The related entity type
 - Second parameter `user => user.messages`: The inverse side of the relationship
@@ -1009,6 +1086,7 @@ Messages Table:
 ```
 
 TypeORM automatically:
+
 1. Creates the `userId` column in the `messages` table
 2. Adds a foreign key constraint linking `messages.userId` to `users.id`
 3. Manages data consistency when users are deleted
@@ -1019,43 +1097,49 @@ TypeORM automatically:
 
 ```typescript
 // Create a user first
-const user = await usersService.createUser('user@example.com', 'hashedPassword');
+const user = await usersService.createUser(
+  'user@example.com',
+  'hashedPassword',
+);
 
 // Messages are created with user reference
 const message = await messagesService.create({
-    content: 'Hello World',
-    user: user  // Assign the User object
+  content: 'Hello World',
+  user: user, // Assign the User object
 });
 ```
 
 #### 2. Querying with Relations
 
 **Eager Loading** (Load user with every message):
+
 ```typescript
 // Get messages with their associated user
 const messages = await messagesRepository.find({
-    relations: ['user']  // Load related user data
+  relations: ['user'], // Load related user data
 });
 
 // Now you can access: messages[0].user.email
-console.log(messages[0].user.email);  // 'user@example.com'
+console.log(messages[0].user.email); // 'user@example.com'
 ```
 
 **Lazy Loading** (Load user only when accessed):
+
 ```typescript
 // Get messages without user data
 const messages = await messagesRepository.find();
 
 // User is a lazy-loaded Promise
-const user = await messages[0].user;  // Loads user on demand
+const user = await messages[0].user; // Loads user on demand
 ```
 
 **Finding by User**:
+
 ```typescript
 // Find all messages from a specific user
 const userMessages = await messagesRepository.find({
-    where: { user: { id: userId } },
-    relations: ['user']
+  where: { user: { id: userId } },
+  relations: ['user'],
 });
 ```
 
@@ -1063,6 +1147,7 @@ const userMessages = await messagesRepository.find({
 
 **Cascade Delete** (Optional):
 If configured, deleting a user can automatically delete their messages:
+
 ```typescript
 @OneToMany(() => MessagesEntity, message => message.user, {
     cascade: true  // Delete messages when user is deleted
@@ -1071,6 +1156,7 @@ messages: MessagesEntity[];
 ```
 
 **Manual Delete**:
+
 ```typescript
 // Delete messages first
 await messagesRepository.delete({ user: { id: userId } });
@@ -1138,10 +1224,10 @@ user: Promise<User>;  // Returns a Promise
 
 ```typescript
 const messages = await messagesRepository
-    .createQueryBuilder('message')
-    .leftJoinAndSelect('message.user', 'user')  // Explicitly join and load
-    .where('user.id = :userId', { userId })
-    .getMany();
+  .createQueryBuilder('message')
+  .leftJoinAndSelect('message.user', 'user') // Explicitly join and load
+  .where('user.id = :userId', { userId })
+  .getMany();
 ```
 
 **Pros**: Full control; optimize exactly what's needed
@@ -1153,12 +1239,12 @@ const messages = await messagesRepository
 
 ```typescript
 const user = await usersRepository.findOne({
-    where: { id: userId },
-    relations: ['messages']  // Load all messages for this user
+  where: { id: userId },
+  relations: ['messages'], // Load all messages for this user
 });
 
 // Access messages
-console.log(user.messages);  // Array of MessagesEntity
+console.log(user.messages); // Array of MessagesEntity
 ```
 
 #### Pattern 2: Filter Related Data
@@ -1167,23 +1253,25 @@ console.log(user.messages);  // Array of MessagesEntity
 // Find user with only recent messages (not supported directly in find())
 // Use QueryBuilder instead:
 const user = await usersRepository
-    .createQueryBuilder('user')
-    .leftJoinAndSelect('user.messages', 'messages',
-        'messages.createdAt > :date',
-        { date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
-    )
-    .where('user.id = :id', { id: userId })
-    .getOne();
+  .createQueryBuilder('user')
+  .leftJoinAndSelect(
+    'user.messages',
+    'messages',
+    'messages.createdAt > :date',
+    { date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+  )
+  .where('user.id = :id', { id: userId })
+  .getOne();
 ```
 
 #### Pattern 3: Count Related Data
 
 ```typescript
 const stats = await usersRepository
-    .createQueryBuilder('user')
-    .loadRelationIds()  // Load IDs instead of full objects
-    .where('user.id = :id', { id: userId })
-    .getOne();
+  .createQueryBuilder('user')
+  .loadRelationIds() // Load IDs instead of full objects
+  .where('user.id = :id', { id: userId })
+  .getOne();
 ```
 
 ### Cascade Options
@@ -1198,6 +1286,7 @@ messages: MessagesEntity[];
 ```
 
 **Options**:
+
 - `cascade: ['insert']` - Auto-insert related data
 - `cascade: ['update']` - Auto-update related data
 - `cascade: ['remove']` - Auto-delete related data
@@ -1211,11 +1300,13 @@ messages: MessagesEntity[];
 TypeORM automatically creates foreign keys that ensure data integrity:
 
 **Constraint Rules**:
+
 1. **Referential Integrity**: Cannot create a message without a valid user
 2. **On Delete Cascade** (if enabled): Deleting a user deletes all their messages
 3. **On Delete Restrict**: Cannot delete a user if they have messages (must delete messages first)
 
 **Example Constraint SQL**:
+
 ```sql
 ALTER TABLE messages
 ADD CONSTRAINT FK_messages_user FOREIGN KEY (userId)
@@ -1225,12 +1316,14 @@ REFERENCES users(id) ON DELETE CASCADE;
 ### Common Issues and Solutions
 
 **Issue 1: Circular Reference in Response**
+
 ```
 Problem: User → messages → user → messages... (infinite loop)
 Solution: Use DTOs and @Serialize() decorator to exclude relations
 ```
 
 **Issue 2: N+1 Query Problem**
+
 ```
 Problem: Loading 100 users, then looping and loading each user's messages (101 queries)
 Solution: Use eager loading or QueryBuilder with joins
@@ -1239,17 +1332,18 @@ Solution: Use eager loading or QueryBuilder with joins
 ```typescript
 // Bad (N+1): 101 queries
 const users = await usersRepository.find();
-users.forEach(user => {
-    const messages = user.messages;  // Each triggers a query
+users.forEach((user) => {
+  const messages = user.messages; // Each triggers a query
 });
 
 // Good: 1 query
 const users = await usersRepository.find({
-    relations: ['messages']
+  relations: ['messages'],
 });
 ```
 
 **Issue 3: Large Data Sets**
+
 ```
 Problem: Loading millions of messages with their users causes memory issues
 Solution: Use pagination and selective loading
@@ -1258,9 +1352,9 @@ Solution: Use pagination and selective loading
 ```typescript
 // Paginated load
 const messages = await messagesRepository.find({
-    relations: ['user'],
-    skip: 0,
-    take: 50  // Load only 50 at a time
+  relations: ['user'],
+  skip: 0,
+  take: 50, // Load only 50 at a time
 });
 ```
 
@@ -1289,7 +1383,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   // Old way: Configure cookie-session middleware
   const cookieSession = require('cookie-session');
   app.use(
@@ -1300,11 +1394,13 @@ async function bootstrap() {
   );
 
   // Old way: Apply global validation pipes
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   await app.listen(process.env.PORT ?? 3000);
 }
@@ -1312,6 +1408,7 @@ bootstrap();
 ```
 
 **Characteristics**:
+
 - Direct imperative configuration
 - Easily visible what's being configured globally
 - All setup code in one central place
@@ -1343,17 +1440,20 @@ const cookieSession = require('cookie-session');
 export class AppModule {
   // New way: Configure middleware using configure() method
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(
-      cookieSession({
-        keys: ['mysecretkey'],
-        maxAge: 24 * 60 * 60 * 1000,
-      })
-    ).forRoutes('*');
+    consumer
+      .apply(
+        cookieSession({
+          keys: ['mysecretkey'],
+          maxAge: 24 * 60 * 60 * 1000,
+        }),
+      )
+      .forRoutes('*');
   }
 }
 ```
 
 **Characteristics**:
+
 - Declarative configuration through providers and middleware consumer
 - Integrated into NestJS dependency injection system
 - Configuration part of module structure
@@ -1361,19 +1461,19 @@ export class AppModule {
 
 ### Side-by-Side Comparison
 
-| Aspect | Old Approach (main.ts) | New Approach (AppModule) |
-|--------|----------------------|------------------------|
-| **Location** | `src/main.ts` | `src/app.module.ts` |
-| **Configuration Style** | Imperative (procedural) | Declarative (module-based) |
-| **Dependency Injection** | Not part of DI system | Integrated with DI system |
-| **Token** | N/A | `APP_PIPE`, `APP_FILTER`, etc. |
-| **Middleware Method** | `app.use()` | `configure()` method |
-| **Global Pipes Method** | `app.useGlobalPipes()` | Provider with `APP_PIPE` token |
-| **Global Filters Method** | `app.useGlobalFilters()` | Provider with `APP_FILTER` token |
-| **Global Guards Method** | `app.useGlobalGuards()` | Provider with `APP_GUARD` token |
-| **Testing Ease** | Harder to test in isolation | Easier to override in tests |
-| **Module Coupling** | Tight coupling in bootstrap | Loose coupling via DI |
-| **Code Organization** | Configuration separate from modules | Configuration with related modules |
+| Aspect                    | Old Approach (main.ts)              | New Approach (AppModule)           |
+| ------------------------- | ----------------------------------- | ---------------------------------- |
+| **Location**              | `src/main.ts`                       | `src/app.module.ts`                |
+| **Configuration Style**   | Imperative (procedural)             | Declarative (module-based)         |
+| **Dependency Injection**  | Not part of DI system               | Integrated with DI system          |
+| **Token**                 | N/A                                 | `APP_PIPE`, `APP_FILTER`, etc.     |
+| **Middleware Method**     | `app.use()`                         | `configure()` method               |
+| **Global Pipes Method**   | `app.useGlobalPipes()`              | Provider with `APP_PIPE` token     |
+| **Global Filters Method** | `app.useGlobalFilters()`            | Provider with `APP_FILTER` token   |
+| **Global Guards Method**  | `app.useGlobalGuards()`             | Provider with `APP_GUARD` token    |
+| **Testing Ease**          | Harder to test in isolation         | Easier to override in tests        |
+| **Module Coupling**       | Tight coupling in bootstrap         | Loose coupling via DI              |
+| **Code Organization**     | Configuration separate from modules | Configuration with related modules |
 
 ### Why the New Approach?
 
@@ -1393,6 +1493,7 @@ app.useGlobalPipes(new ValidationPipe({ ... }));
 ```
 
 With DI integration, you can:
+
 - Override pipes in tests with different implementations
 - Inject dependencies into the ValidationPipe if needed
 - Use factories for dynamic configuration
@@ -1482,7 +1583,7 @@ configure(consumer: MiddlewareConsumer) {
   consumer
     .apply(AuthMiddleware)
     .forRoutes('api/*');  // Clear route specificity
-  
+
   consumer
     .apply(LoggerMiddleware)
     .forRoutes('*');      // Apply to all routes
@@ -1503,19 +1604,19 @@ import { APP_PIPE, APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
       provide: APP_PIPE,
       useClass: MyValidationPipe,
     },
-    
+
     // Global Exception Filter
     {
       provide: APP_FILTER,
       useClass: MyExceptionFilter,
     },
-    
+
     // Global Guard
     {
       provide: APP_GUARD,
       useClass: MyGuard,
     },
-    
+
     // Global Interceptor
     {
       provide: APP_INTERCEPTOR,
@@ -1527,6 +1628,7 @@ export class AppModule {}
 ```
 
 **Benefits**:
+
 - Consistent pattern for all global features
 - All configuration in one place (AppModule)
 - Easier to manage and override in tests
@@ -1535,12 +1637,14 @@ export class AppModule {}
 ### When to Use Each Approach
 
 **Use Old Approach (main.ts) for**:
+
 - Quick prototyping
 - Simple applications without testing requirements
 - Configuration that must happen after app creation
 - Third-party Express middleware setup
 
 **Use New Approach (AppModule) for**:
+
 - Production applications
 - Applications with comprehensive test suites
 - Complex modular applications
@@ -1561,7 +1665,7 @@ providers: [
     provide: APP_PIPE,
     useValue: new ValidationPipe({ whitelist: true }),
   },
-]
+];
 ```
 
 **Step 2: Move Exception Filter to AppModule**
@@ -1576,7 +1680,7 @@ providers: [
     provide: APP_FILTER,
     useClass: HttpExceptionFilter,
   },
-]
+];
 ```
 
 **Step 3: Move Middleware to configure() Method**
@@ -1605,12 +1709,14 @@ bootstrap();
 ### Project Implementation
 
 **In this project**:
+
 - ValidationPipe is registered via `APP_PIPE` token in AppModule providers
 - Middleware (cookie-session) is configured using `configure()` method
 - HttpExceptionFilter is still applied in main.ts (can be migrated to use `APP_FILTER` for full consistency)
 - Commented-out code in main.ts shows the old approach for reference
 
 **Code snippet from app.module.ts**:
+
 ```typescript
 providers: [
   AppService,
@@ -1641,6 +1747,7 @@ configure(consumer: MiddlewareConsumer) {
 The shift from `main.ts` configuration to `AppModule` configuration represents a move toward more modular, testable, and maintainable NestJS applications. While the old approach is simpler for small projects, the new approach scales better and integrates more deeply with NestJS's design philosophy. The current project uses the new approach for validation pipes and middleware, providing a solid foundation for testing and extensibility.
 
 **Key Takeaways**:
+
 - New approach integrates with NestJS dependency injection
 - Significantly improves testability and override capabilities
 - Keeps configuration with related modules

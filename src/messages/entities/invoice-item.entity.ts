@@ -19,7 +19,7 @@ export class InvoiceItem {
   @Column()
   productId: string;
 
-  @OneToOne(() => Product)
+  @ManyToOne(() => Product)
   @JoinColumn({ name: 'productId' })
   product: Product;
 
