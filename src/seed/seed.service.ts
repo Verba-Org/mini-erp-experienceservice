@@ -41,22 +41,20 @@ export class SeedService {
         const savedOrg1 = await this.organizationRepository.save(org1);
         const savedOrg2 = await this.organizationRepository.save(org2);
 
-        this.logger.log(
-          `Created ${2} organizations`,
-        );
+        this.logger.log(`Created ${2} organizations`);
 
         // Create Products for Org 1
         const products1 = [
           {
             org_id: savedOrg2.id,
-            name: 'kingfisher Premium Lager',
+            name: 'kingfisher',
             unit_price: 150.0,
             current_stock: 50,
             organization: savedOrg2,
           },
           {
             org_id: savedOrg2.id,
-            name: 'tuborg Green Lager',
+            name: 'tuborg',
             unit_price: 130.0,
             current_stock: 200,
             organization: savedOrg2,
@@ -120,7 +118,7 @@ export class SeedService {
           },
           {
             org_id: savedOrg2.id,
-            name: 'Marriott International',
+            name: 'Ryan',
             type: 'CUSTOMER',
             phone: '416-555-0125',
             organization: savedOrg2,
@@ -155,9 +153,7 @@ export class SeedService {
         await this.partyRepository.save(parties1);
         await this.partyRepository.save(parties2);
 
-        this.logger.log(
-          `Created ${parties1.length + parties2.length} parties`,
-        );
+        this.logger.log(`Created ${parties1.length + parties2.length} parties`);
 
         this.logger.log('Database seeding completed successfully!');
       } else {

@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+} from 'typeorm';
 import { Organization } from './organization.entity';
 import { Party } from './party.entity';
 import { InvoiceItem } from './invoice-item.entity';
@@ -20,8 +27,14 @@ export class Invoice {
   @Column({ default: 'PENDING' })
   status: string; // PENDING, DELIVERED, PAID
 
-  @Column('decimal', { precision: 12, scale: 2  , nullable: true })
+  @Column('decimal', { precision: 12, scale: 2, nullable: false })
   total_amount: number | null;
+
+  @Column('decimal', { precision: 12, scale: 2, default: 0 })
+  paid_amount: number;
+
+  @Column('decimal', { precision: 12, scale: 2, nullable: false })
+  balance_amount: number;
 
   @Column({ type: 'datetime', nullable: true })
   due_date: Date | null;
@@ -33,7 +46,7 @@ export class Invoice {
   partyId: string;
 
   @Column()
-  org_id: string
+  org_id: string;
 
   @ManyToOne(() => Party)
   @JoinColumn({ name: 'partyId' })
