@@ -8,14 +8,23 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, ILike, In, Repository } from 'typeorm';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { response } from 'express';
+import { SimpleInvoiceData } from '../dtos/simple-invoice-data';
+import { PdfGeneratorUtil } from 'src/common/utils/pdf.generator.util';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface InvoiceProcessorFacade {
   processInvoice(invoiceData: BrainClientSchema): Promise<String>;
 }
 
+interface TemplateMap {
+  'simple-invoice-template': SimpleInvoiceData;
+}
+
 @Injectable()
 export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
   private readonly logger = new Logger(InvoiceProcessorFacadeImpl.name);
+  private readonly INVOICES_DIR = path.join(process.cwd(), 'invoices');
 
   constructor(
     @InjectRepository(Invoice) private invoiceRepository: Repository<Invoice>,
@@ -24,7 +33,17 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
     private organizationRepository: Repository<Organization>,
     @InjectRepository(Product) private productRepository: Repository<Product>,
     private datasource: DataSource,
-  ) {}
+    private pdfGeneratorUtil: PdfGeneratorUtil,
+  ) {
+    this.ensureInvoicesDirectoryExists();
+  }
+
+  private ensureInvoicesDirectoryExists(): void {
+    if (!fs.existsSync(this.INVOICES_DIR)) {
+      fs.mkdirSync(this.INVOICES_DIR, { recursive: true });
+      this.logger.log(`Created invoices directory at: ${this.INVOICES_DIR}`);
+    }
+  }
 
   private readonly DEFAULT_CUSTOMER = 'Anonymous Traders';
   private readonly DEFAULT_ORGANIZATION = 'Selmel Liquors';
@@ -220,6 +239,18 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
     return responseString;
   }
 
+  // Generate PDF for the invoice
+  async generatePdf<T extends keyof TemplateMap>(
+    templateName: T,
+    data: TemplateMap[T],
+  ): Promise<Buffer> {
+    // Logic to generate PDF using the specified template and data
+    // This is a placeholder implementation; replace with actual PDF generation logic
+    this.logger.log(`Generating PDF using template: ${templateName}`);
+    // For example, you might use a PDF generation library here
+    return this.pdfGeneratorUtil.generatePdfFromTemplate(templateName, data);
+  }
+
   async generateInvoice(invoiceData: BrainClientSchema): Promise<string> {
     let responseString = '';
     // Logic to generate invoice
@@ -238,7 +269,7 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
       // Retrieve the invoice by order_number
       const invoice = await manager.findOne(Invoice, {
         where: { display_number: ILike(invoiceData.order_number!) },
-        relations: ['items'],
+        relations: ['items', 'party'],
       });
 
       // If invoice not found, throw an error
@@ -248,12 +279,42 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
         );
       }
 
-      for (const item of invoice.items) {
-        // TBD - generate invoice in PDF format.
-        this.logger.log(
-          `Item: ${item.description}, Quantity: ${item.quantity}`,
-        );
-      }
+      const simpleInvoiceData: SimpleInvoiceData = {
+        invoice_number: invoice.display_number,
+        created_date: new Date().toDateString(),
+        due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toDateString(),
+        customer_name: invoice.party.name,
+        customer_email: invoice.party.email || 'N/A',
+        items: await Promise.all(
+          invoice.items.map(async (invItem) => {
+            const product: Product | null =
+              await this.productRepository.findOne({
+                where: { id: invItem.productId },
+              });
+            return {
+              name: invItem.description,
+              quantity: invItem.quantity,
+              unit_price: product ? product.unit_price : 5, // Default unit price if product not found
+              total_price:
+                invItem.quantity * (product ? product.unit_price : 5),
+            };
+          }),
+        ),
+        currency: 'CAD',
+        total_amount: invoice.total_amount!,
+      };
+
+      // Generate PDF
+      const pdfBuffer = await this.generatePdf(
+        'simple-invoice-template',
+        simpleInvoiceData,
+      );
+
+      // save pdf buffer to filesystem - for testing purpose only
+      const fs = require('fs');
+      const filePath = `./invoices/invoice_${invoice.display_number}.pdf`;
+      fs.writeFileSync(filePath, pdfBuffer);
+      this.logger.log(`Invoice PDF generated at: ${filePath}`);
       // Update invoice status to INVOICED
       invoice.status = 'INVOICED';
       await manager.save(invoice);

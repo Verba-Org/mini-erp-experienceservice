@@ -1,4 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { Organization } from './organization.entity';
 
 @Entity()
@@ -18,6 +24,12 @@ export class Party {
   @Column({ nullable: true })
   phone: string;
 
-  @ManyToOne(() => Organization, organization => organization.parties)
+  @Column({ nullable: true })
+  email: string;
+
+  @Column({ nullable: true })
+  address: string;
+
+  @ManyToOne(() => Organization, (organization) => organization.parties)
   organization: Organization;
 }
