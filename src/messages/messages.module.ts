@@ -15,6 +15,9 @@ import { InvoiceItem } from './entities/invoice-item.entity';
 import { InvoiceProcessorFacadeImpl } from './facade/invoice.processor.facade';
 import { WhatsappController } from './whatsapp.controller';
 import { PdfGeneratorUtil } from 'src/common/utils/pdf.generator.util';
+import { GoogleCloudStorageUtil } from 'src/common/utils/google-cloud-storage.util';
+import { In } from 'typeorm';
+import { InvoiceLinkController } from './invoice.controller';
 
 // Module definition for Messages . Modules are used to organize related components, controllers, and services in a NestJS application.
 @Module({
@@ -32,7 +35,7 @@ import { PdfGeneratorUtil } from 'src/common/utils/pdf.generator.util';
   ],
 
   // imports: [], // Used to import other modules.. specify the module names here
-  controllers: [MessagesController, WhatsappController],
+  controllers: [MessagesController, WhatsappController, InvoiceLinkController],
   // bean definitions in spring boot
   providers: [
     MessagesService,
@@ -40,6 +43,7 @@ import { PdfGeneratorUtil } from 'src/common/utils/pdf.generator.util';
     InvoiceProcessorFacadeImpl,
     WhatsappTwilioFacade,
     PdfGeneratorUtil,
+    GoogleCloudStorageUtil,
   ],
   exports: [MessagesService],
   // exports: [] // Used to make providers available outside this module to other modules

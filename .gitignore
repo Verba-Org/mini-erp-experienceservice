@@ -111,3 +111,6 @@ package-lock.json
 *.tmp
 .tmp/
 .temp/
+
+# exclude Google Cloud credentials
+google-credentials.json

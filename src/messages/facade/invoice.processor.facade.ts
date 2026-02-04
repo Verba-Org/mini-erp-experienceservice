@@ -12,6 +12,7 @@ import { SimpleInvoiceData } from '../dtos/simple-invoice-data';
 import { PdfGeneratorUtil } from 'src/common/utils/pdf.generator.util';
 import * as fs from 'fs';
 import * as path from 'path';
+import { GoogleCloudStorageUtil } from 'src/common/utils/google-cloud-storage.util';
 
 export interface InvoiceProcessorFacade {
   processInvoice(invoiceData: BrainClientSchema): Promise<String>;
@@ -34,6 +35,7 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
     @InjectRepository(Product) private productRepository: Repository<Product>,
     private datasource: DataSource,
     private pdfGeneratorUtil: PdfGeneratorUtil,
+    private googleCloudStorageUtil: GoogleCloudStorageUtil,
   ) {
     this.ensureInvoicesDirectoryExists();
   }
@@ -311,10 +313,18 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
       );
 
       // save pdf buffer to filesystem - for testing purpose only
-      const fs = require('fs');
-      const filePath = `./invoices/invoice_${invoice.display_number}.pdf`;
-      fs.writeFileSync(filePath, pdfBuffer);
-      this.logger.log(`Invoice PDF generated at: ${filePath}`);
+      // const fs = require('fs');
+      // const filePath = `./invoices/invoice_${invoice.display_number}.pdf`;
+      // fs.writeFileSync(filePath, pdfBuffer);
+      // this.logger.log(`Invoice PDF generated at: ${filePath}`);
+      // Upload PDF to Google Cloud Storage and get signed URL
+      const signedUrl = await this.googleCloudStorageUtil.uploadAndGetSignedUrl(
+        `invoice_${invoice.display_number}.pdf`,
+        pdfBuffer,
+      );
+      this.logger.log(`Invoice PDF uploaded to GCS. Signed URL: ${signedUrl}`);
+
+      responseString = `Generated Invoice for Order ${invoiceData.order_number} and can be downloaded at https://reachable-leisha-postdiscoidal.ngrok-free.dev/view/${invoiceData.order_number}`;
       // Update invoice status to INVOICED
       invoice.status = 'INVOICED';
       await manager.save(invoice);

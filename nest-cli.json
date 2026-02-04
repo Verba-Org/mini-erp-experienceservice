@@ -8,6 +8,10 @@
       {
         "include": "resources/templates/**/*",
         "outDir": "dist"
+      },
+      {
+        "include": "resources/gcp/google-cloud-credentials.json",
+        "outDir": "dist"
       }
     ]
   }

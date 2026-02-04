@@ -24,6 +24,22 @@ export class PdfGeneratorUtil {
 
     // Compile the template with Handlebars
     const template = compile(templateContent);
+
+    // Add inline logo image as base64
+    const logoPath = path.join(
+      __dirname,
+      '..',
+      '..',
+      'resources',
+      'templates',
+      'logo.png',
+    );
+    const logoImage = fs.readFileSync(logoPath);
+    const logoBase64 = `data:image/png;base64,${logoImage.toString('base64')}`;
+    data.logoImage = logoBase64;
+
+    // Generate the final HTML with data
+
     const html = template(data);
 
     // Launch Puppeteer to generate PDF
