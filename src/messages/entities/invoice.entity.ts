@@ -28,7 +28,16 @@ export class Invoice {
   status: string; // PENDING, DELIVERED, PAID
 
   @Column('decimal', { precision: 12, scale: 2, nullable: false })
+  subtotal_amount: number;
+
+  @Column('decimal', { precision: 12, scale: 2, default: 0 })
+  tax_amount: number;
+
+  @Column('decimal', { precision: 12, scale: 2, nullable: false })
   total_amount: number | null;
+
+  @Column('text', { nullable: true })
+  tax_summary: string; // JSON string summarizing tax details
 
   @Column('decimal', { precision: 12, scale: 2, default: 0 })
   paid_amount: number;

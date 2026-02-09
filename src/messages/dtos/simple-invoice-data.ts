@@ -4,6 +4,9 @@ export interface SimpleInvoiceData {
   due_date: string;
   customer_name: string;
   customer_email: string;
+  subtotal_amount: number;
+  tax_amount: number;
+  tax_summary: string;
   items: {
     name: string;
     quantity: number;

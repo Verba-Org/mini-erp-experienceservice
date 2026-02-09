@@ -13,9 +13,11 @@ import { PdfGeneratorUtil } from 'src/common/utils/pdf.generator.util';
 import * as fs from 'fs';
 import * as path from 'path';
 import { GoogleCloudStorageUtil } from 'src/common/utils/google-cloud-storage.util';
+import { TaxCalculator } from 'src/common/utils/tax-calculator-util';
+import { InvoiceResponse } from '../dtos/invoice-response';
 
 export interface InvoiceProcessorFacade {
-  processInvoice(invoiceData: BrainClientSchema): Promise<String>;
+  processInvoice(invoiceData: BrainClientSchema): Promise<InvoiceResponse>;
 }
 
 interface TemplateMap {
@@ -36,6 +38,7 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
     private datasource: DataSource,
     private pdfGeneratorUtil: PdfGeneratorUtil,
     private googleCloudStorageUtil: GoogleCloudStorageUtil,
+    private taxCalculator: TaxCalculator,
   ) {
     this.ensureInvoicesDirectoryExists();
   }
@@ -50,9 +53,12 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
   private readonly DEFAULT_CUSTOMER = 'Anonymous Traders';
   private readonly DEFAULT_ORGANIZATION = 'Selmel Liquors';
 
-  async processInvoice(invoiceData: BrainClientSchema): Promise<String> {
+  async processInvoice(
+    invoiceData: BrainClientSchema,
+  ): Promise<InvoiceResponse> {
     //     Ryan Wants 800 bottles of Kingfisher by Feb 1st. - CREATE_SALES_ORDER
     // Generate a entry in invoice table with status = 'PENDING' and generate an display message
+    const invoiceResponse: InvoiceResponse = new InvoiceResponse();
     if (invoiceData.intent === 'CREATE_SALES_ORDER') {
       // Logic to create a sales order invoice
       try {
@@ -62,11 +68,13 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
           'Sales order invoice created with ID:',
           storedInvoice.id,
         );
-        return `Created a Sales Order with Order # ${storedInvoice?.display_number}. Use this Order number for further interactions`;
+
+        invoiceResponse.display_so_number = storedInvoice.display_number!;
+        invoiceResponse.responseStr = `Created a Sales Order with Order # ${storedInvoice?.display_number}. Use this Order number for further interactions`;
       } catch (error) {
         this.logger.error(error);
         // throw new Error('Error creating sales order invoice: ' + error.message);
-        return `Issue creating order ${error.message}`;
+        invoiceResponse.responseStr = `Issue creating order ${error.message}`;
       }
     }
     // Sold Ryan 800 bottles of Kingfisher for order <display message> - CREATE_FULLFILLMENT
@@ -92,7 +100,11 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
       return await this.recordPayment(invoiceData);
     } else if (invoiceData.intent === 'UNKNOWN') {
       this.logger.log('Unknown intent received. No action taken.');
-      return 'Sorry, I could not understand your request. Please try again with a valid command.';
+      return {
+        display_so_number: invoiceData.order_number || 'N/A',
+        responseStr:
+          'Sorry, I could not understand your request. Please try again with a valid command.',
+      } as InvoiceResponse;
     } else if (invoiceData.intent === 'CHECK_INVENTORY') {
       this.logger.log('Inventory check requested. No invoice action taken.');
       if (invoiceData.target_product_name) {
@@ -102,7 +114,12 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
       } else if (invoiceData.order_number) {
         return await this.checkInventoryByOrderNumber(invoiceData);
       } else {
-        return 'Please provide a product name or order number to check inventory.';
+        // return 'Please provide a product name or order number to check inventory.';
+        return {
+          display_so_number: invoiceData.order_number || null,
+          responseStr:
+            'Please provide a product name or order number to check inventory.',
+        } as InvoiceResponse;
       }
     } else if (invoiceData.intent === 'STATUS_CHECK') {
       this.logger.log('Status check requested. No invoice action taken.');
@@ -110,12 +127,16 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
     }
     // console.log('Processing invoice data:', invoiceData);
     // return { status: 'processed', data: invoiceData };
-    return `Functionality not implement`;
+    // return `Functionality not implement`;
+    return {
+      display_so_number: invoiceData.order_number || null,
+      responseStr: `Functionality for intent ${invoiceData.intent} not implemented yet.`,
+    } as InvoiceResponse;
   }
 
   private async statusCheckByOrderNumber(
     order_number: string,
-  ): Promise<string> {
+  ): Promise<InvoiceResponse> {
     let responseString = '';
     // Logic to check status for the order number
     this.logger.log('Checking status for order number:', order_number);
@@ -126,16 +147,22 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
 
     // If invoice not found, throw an error
     if (!invoice) {
-      return `Invoice with order number ${order_number} not found`;
+      return {
+        display_so_number: order_number,
+        responseStr: `Invoice with order number ${order_number} not found`,
+      } as InvoiceResponse;
     }
 
     responseString = `Order Number: ${invoice.display_number}, Status: ${invoice.status}, Total Amount: ${invoice.total_amount}, Paid Amount: ${invoice.paid_amount}, Balance Amount: ${invoice.balance_amount}`;
-    return responseString;
+    return {
+      display_so_number: invoice.display_number,
+      responseStr: responseString,
+    } as InvoiceResponse;
   }
 
   private async checkInventoryByProductName(
     product_name: string,
-  ): Promise<string> {
+  ): Promise<InvoiceResponse> {
     let responseString = '';
     // Logic to check inventory for the products in the invoice
     this.logger.log('Checking inventory for products...' + product_name);
@@ -144,15 +171,21 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
       where: { name: ILike(product_name) },
     });
     if (!product) {
-      return `Product: ${product_name} not found in inventory. Please check the product name.`;
+      return {
+        display_so_number: null,
+        responseStr: `Product: ${product_name} not found in inventory. Please check the product name.`,
+      } as InvoiceResponse;
     }
     responseString = `Product: ${product_name}, Available Stock: ${product.current_stock}`;
-    return responseString;
+    return {
+      display_so_number: null,
+      responseStr: responseString,
+    } as InvoiceResponse;
   }
 
   async checkInventoryByOrderNumber(
     invoiceData: BrainClientSchema,
-  ): Promise<string> {
+  ): Promise<InvoiceResponse> {
     let responseString = '';
     // Logic to check inventory for the products in the invoice
     this.logger.log(
@@ -174,10 +207,15 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
     } else {
       responseString = 'No line items provided for inventory check.';
     }
-    return responseString;
+    return {
+      display_so_number: null,
+      responseStr: responseString,
+    } as InvoiceResponse;
   }
 
-  async recordPayment(invoiceData: BrainClientSchema): Promise<string> {
+  async recordPayment(
+    invoiceData: BrainClientSchema,
+  ): Promise<InvoiceResponse> {
     let responseString = '';
     let invoiceStatus = 'PAID';
     // Logic to record payment for the invoice
@@ -238,7 +276,10 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
     } else {
       responseString += ` Invoice status updated to ${invoiceStatus}.`;
     }
-    return responseString;
+    return {
+      display_so_number: invoiceData.order_number!,
+      responseStr: responseString,
+    } as InvoiceResponse;
   }
 
   // Generate PDF for the invoice
@@ -253,7 +294,9 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
     return this.pdfGeneratorUtil.generatePdfFromTemplate(templateName, data);
   }
 
-  async generateInvoice(invoiceData: BrainClientSchema): Promise<string> {
+  async generateInvoice(
+    invoiceData: BrainClientSchema,
+  ): Promise<InvoiceResponse> {
     let responseString = '';
     // Logic to generate invoice
     await this.datasource.transaction(async (manager) => {
@@ -287,6 +330,9 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
         due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toDateString(),
         customer_name: invoice.party.name,
         customer_email: invoice.party.email || 'N/A',
+        subtotal_amount: invoice.subtotal_amount,
+        tax_amount: invoice.tax_amount,
+        tax_summary: invoice.tax_summary || '',
         items: await Promise.all(
           invoice.items.map(async (invItem) => {
             const product: Product | null =
@@ -336,10 +382,15 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
     } else {
       responseString += ` Generated Invoice and can be downloaded at this link. To close the order please confirm payment receipt.`;
     }
-    return responseString;
+    return {
+      display_so_number: invoiceData.order_number!,
+      responseStr: responseString,
+    } as InvoiceResponse;
   }
 
-  async fullfillOrder(invoiceData: BrainClientSchema): Promise<string> {
+  async fullfillOrder(
+    invoiceData: BrainClientSchema,
+  ): Promise<InvoiceResponse> {
     let responseString = '';
     // Logic to fullfill the order
     await this.datasource.transaction(async (manager) => {
@@ -392,7 +443,10 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
     } else {
       responseString += ` Order has been successfully fulfilled and stock levels updated.`;
     }
-    return responseString;
+    return {
+      display_so_number: invoiceData.order_number!,
+      responseStr: responseString,
+    } as InvoiceResponse;
   }
 
   private async createNewInvoiceForMissingOrderNumber(
@@ -438,6 +492,7 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
     // Check if party with the name exists, if the party with the name does not exist , retrieve party with name anonymous
     const party = await this.__getPartyByName(
       data.party_name || this.DEFAULT_CUSTOMER,
+      true,
     );
     // invoice.party = party!;
     // invoice.party = { id: party!.id } as Party
@@ -454,7 +509,16 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
       invoice.items = invoiceItems;
     }
 
-    invoice.total_amount = await this.calculateTotalAmount(invoice);
+    // Calculate total amount and tax
+    const totalWithTax = await this.calculateTotalAmount(
+      invoice,
+      organization!.country,
+    );
+
+    invoice.subtotal_amount = totalWithTax.total - totalWithTax.taxAmount;
+    invoice.tax_amount = totalWithTax.taxAmount;
+    invoice.tax_summary = ` ${totalWithTax.taxType} @ ${totalWithTax.rate}%`;
+    invoice.total_amount = totalWithTax.total;
     invoice.paid_amount = 0;
     invoice.balance_amount = invoice.total_amount;
 
@@ -466,8 +530,16 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
   }
 
   // Calculate total amount for the invoice
-  async calculateTotalAmount(invoice: Invoice): Promise<number> {
-    let total = 0;
+  async calculateTotalAmount(
+    invoice: Invoice,
+    country: string,
+  ): Promise<{
+    rate: number;
+    taxAmount: number;
+    total: number;
+    taxType: string;
+  }> {
+    let subtotal = 0;
     if (invoice.items && invoice.items.length > 0) {
       for (const item of invoice.items) {
         // Assuming unit_price is added to InvoiceItem entity
@@ -475,9 +547,10 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
         const product = await this.productRepository.findOne({
           where: { id: item.productId },
         });
-        total += item.quantity * (product ? product.unit_price : 0);
+        subtotal += item.quantity * (product ? product.unit_price : 0);
       }
     }
+    const total = await this.taxCalculator.calculate(country, subtotal);
     return total;
   }
 
@@ -522,13 +595,29 @@ export class InvoiceProcessorFacadeImpl implements InvoiceProcessorFacade {
     });
   }
 
-  async __getPartyByName(name: string): Promise<Party | null> {
+  async __getPartyByName(
+    name: string,
+    createnew: boolean,
+  ): Promise<Party | null> {
     // if party is not found, search party with name 'Anonymous'
     const party = await this.partyRepository.findOne({
       where: { name: ILike(name) },
     });
     if (!party) {
       this.logger.warn(`Party with name ${name} not found.`);
+      // create a new customer if createnew is true
+      if (createnew) {
+        const newParty = new Party();
+        newParty.name = name;
+        newParty.email = '';
+        newParty.org_id = (await this.__getOrganizationByName(
+          this.DEFAULT_ORGANIZATION,
+        ))!.id;
+        newParty.address = '';
+        await this.partyRepository.save(newParty);
+        this.logger.log(`Created new party with name ${name}.`);
+        return newParty;
+      }
       return await this.partyRepository.findOne({
         where: { name: ILike(this.DEFAULT_CUSTOMER) },
       });

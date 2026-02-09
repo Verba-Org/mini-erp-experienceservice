@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module , ValidationPipe } from '@nestjs/common';
+import { MiddlewareConsumer, Module, ValidationPipe } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
 // import ConfigModule and ConfigService for environment-based configuration
@@ -18,12 +18,13 @@ import { Party } from './messages/entities/party.entity';
 import { Invoice } from './messages/entities/invoice.entity';
 import { InvoiceItem } from './messages/entities/invoice-item.entity';
 import { APP_PIPE } from '@nestjs/core';
+import { TaxConfig } from './messages/entities/tax-config.entity';
+import { UserSessionEntity } from './users/user-session-entity';
 const cookieSession = require('cookie-session');
 
 // Root module of the application. It imports other feature modules to compose the application structure.
 
 @Module({
-
   imports: [
     // Import HttpModule to enable HTTP communication with external services
     HttpModule,
@@ -49,7 +50,17 @@ const cookieSession = require('cookie-session');
           type: configService.get<any>('DB_TYPE'), // e.g., 'sqlite'
           database: configService.get<string>('DB_NAME'), // e.g., 'db.sqlite'
           // Purpose: This tells TypeORM which entities to manage and synchronize with the database at application startup.
-          entities: [MessagesEntity, User, Organization, Product, Party, Invoice, InvoiceItem],
+          entities: [
+            MessagesEntity,
+            User,
+            Organization,
+            Product,
+            Party,
+            Invoice,
+            InvoiceItem,
+            TaxConfig,
+            UserSessionEntity,
+          ],
           synchronize: true, // Note: Set to false in production to avoid data loss
         };
       },
@@ -59,36 +70,33 @@ const cookieSession = require('cookie-session');
     SeedModule,
   ],
   controllers: [AppController],
-  providers: [AppService,
+  providers: [
+    AppService,
     // Register a global validation pipe for request data validation
     {
       provide: APP_PIPE,
-      useValue: new ValidationPipe(
-            { whitelist: true, // Strip properties that do not have any decorators
-              forbidNonWhitelisted: true, // Throw an error if non-whitelisted properties are present
-              transform: true, // Automatically transform payloads to be objects typed according to their DTO classes
-            }
-  ), 
-    }
-
-
+      useValue: new ValidationPipe({
+        whitelist: true, // Strip properties that do not have any decorators
+        forbidNonWhitelisted: true, // Throw an error if non-whitelisted properties are present
+        transform: true, // Automatically transform payloads to be objects typed according to their DTO classes
+      }),
+    },
   ],
-  
 })
 export class AppModule {
-
   constructor(private configService: ConfigService) {}
 
   // Configure middleware for the application that applies to all routes.
-configure(consumer: MiddlewareConsumer) {
-  console.log('AppModule configured');    
-  // this is similar to spring boot authentication filter where every request will go through this filter
-  consumer.apply( 
-    cookieSession({
-      keys: [this.configService.get('COOKIE_SECRET')], // Replace with your own secret keys
-      // maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    }))
-    .forRoutes('*');
-}
-
+  configure(consumer: MiddlewareConsumer) {
+    console.log('AppModule configured');
+    // this is similar to spring boot authentication filter where every request will go through this filter
+    consumer
+      .apply(
+        cookieSession({
+          keys: [this.configService.get('COOKIE_SECRET')], // Replace with your own secret keys
+          // maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        }),
+      )
+      .forRoutes('*');
+  }
 }

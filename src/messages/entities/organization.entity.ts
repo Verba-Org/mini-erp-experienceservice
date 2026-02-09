@@ -11,18 +11,18 @@ export class Organization {
   @Column()
   name: string;
 
-  @Column({ default: 'CA' }) // 'CA' for Milton, 'IN' for India
+  @Column({ default: 'CA' }) // 'CA' for Canada, 'IN' for India
   country: string;
 
   @Column({ nullable: true })
   tax_id: string; // Business Number or GSTIN
 
-  @OneToMany(() => Product, product => product.organization)
+  @OneToMany(() => Product, (product) => product.organization)
   products: Product[];
 
-  @OneToMany(() => Party, party => party.organization)
+  @OneToMany(() => Party, (party) => party.organization)
   parties: Party[];
 
-  @OneToMany(() => Invoice, invoice => invoice.organization)
+  @OneToMany(() => Invoice, (invoice) => invoice.organization)
   invoices: Invoice[];
 }

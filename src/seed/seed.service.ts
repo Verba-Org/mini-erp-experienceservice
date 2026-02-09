@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Organization } from '../messages/entities/organization.entity';
 import { Product } from '../messages/entities/product.entity';
 import { Party } from '../messages/entities/party.entity';
+import { TaxConfig } from 'src/messages/entities/tax-config.entity';
 
 @Injectable()
 export class SeedService {
@@ -16,6 +17,8 @@ export class SeedService {
     private productRepository: Repository<Product>,
     @InjectRepository(Party)
     private partyRepository: Repository<Party>,
+    @InjectRepository(TaxConfig)
+    private taxConfigRepository: Repository<TaxConfig>,
   ) {}
 
   async seed(): Promise<void> {
@@ -154,6 +157,23 @@ export class SeedService {
         await this.partyRepository.save(parties2);
 
         this.logger.log(`Created ${parties1.length + parties2.length} parties`);
+
+        // Seed Tax Configurations
+        const taxConfigs = [
+          {
+            country: 'IN',
+            tax_type: 'GST',
+            rate: 18.0,
+          },
+          {
+            country: 'CA',
+            tax_type: 'HST',
+            rate: 13.0,
+          },
+        ];
+
+        await this.taxConfigRepository.save(taxConfigs);
+        this.logger.log(`Created ${taxConfigs.length} tax configurations`);
 
         this.logger.log('Database seeding completed successfully!');
       } else {
